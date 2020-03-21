@@ -11,13 +11,13 @@ import re
 # prefs = { 'disk-cache-size':4096}
 # chromeOptions.add_experimental_option('prefs', prefs)
 
-
-start_point = "@10.7754483,106.6895788,15z"
+start_point = "@{lat},{lon},15z"
+# start_point = "@10.7754483,106.6895788,15z"
 initial_URL = "https://www.google.com/maps"
-target_URL = initial_URL + "/" + start_point + "?hl=vi"
+target_URL = initial_URL + "/" + start_point.format(lat="10.7754483", lon="106.6895788") + "?hl=vi"
 
-timeDelay = 5
-timeMiniDelay = 0.2
+time_delay = 5
+time_mini_delay = 0.2
 nullValue = "None"
 max_attempt = 20  # maxmimum attempt to locate element
 
@@ -29,7 +29,7 @@ current_key_word = ""
 
 main_driver = webdriver.Chrome(os.getcwd() + "/chromedriver")
 main_driver.get(target_URL)
-main_driver.implicitly_wait(timeDelay)
+main_driver.implicitly_wait(time_delay)
 
 # Write to file
 filename = str(time.ctime()) + ".csv"
@@ -37,6 +37,8 @@ filename = filename.replace(":", "-").replace(' ', '_')
 output_file = csv.writer(open("data/" + filename, "a", encoding='utf-8'))
 output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon"])
 
+list_location_gotten = set()
+list_needed_get = list()
 
 def append_to_file(content):
     output_file.writerow(content)
@@ -60,6 +62,7 @@ def init_search(driver, keyword):
 
 
 def get_result_div(driver):
+
     result_div_list = driver.find_elements_by_class_name("section-result")
     while len(result_div_list) == 0:  # if not found, meaning that is not loaded yet
         result_div_list = driver.find_elements_by_class_name("section-result")
@@ -73,30 +76,70 @@ def get_result_div(driver):
 
 
 def fetch_return(driver, div):
-    div.click()
+    cnt = 0
+    while True:
+        try:
+            div.click()
+            break
+        except:
+            print("Please wait to load...")
+            time.sleep(time_mini_delay)
+            cnt += 1
+            if cnt > max_attempt:
+                print("!!!!---Oops! Some error in listing location")
+                exit(0)
 
-    location_name = find_element_by_xpath_until_found(driver,
-                                                      "//div[@class='section-hero-header-title-description']//h1["
-                                                      "contains(@class, 'section-hero-header-title-title')]",
-                                                      True)
+    time.sleep(time_mini_delay + 0.3)
+    cnt = 0
 
-    review_num = driver.find_element_by_xpath(
-        "(//span[@class='section-rating-term'])[1]/span/span/button[@class='widget-pane-link']").text.strip("()")
-    # more exactly use below
-    # addr = driver.find_element_by_xpath("//div[contains(@class, 'section-info-hoverable') and descendant-or-self::span[@aria-label='Địa chỉ']]").text
-    addr = driver.find_element_by_xpath("//div[@class='section-info-line']//span[@class='widget-pane-link']").text
-    keyword = driver.find_element_by_xpath(
-        "(//span[@class='section-rating-term'])[2]/span/button[@class='widget-pane-link']").text
-    print(location_name)
-    current_url = driver.current_url
-    lat, lon, _ = re.search(r"(?<=\/@)[^\/]+", current_url).group().split(',')
+    while True:
+        try:
+            current_url = driver.current_url
+            lat = re.search(r"(?<=!3d)[0-9\.]+", driver.current_url).group()
+            lon = re.search(r"(?<=!4d)[0-9\.]+", driver.current_url).group()
+            key = (lat + "_" + lon)
+            break
 
-    store_info(location_name, review_num, keyword, addr, lat, lon)
+        except:
+            print("Please wait to load...")
+            time.sleep(time_mini_delay)
+            cnt += 1
+            if cnt > max_attempt:
+                print("!!!!---Oops! Some error in extract coordinate")
+                exit(0)
+
+    keyword = current_key_word
+    review_num = 0
+    if key not in list_location_gotten:
+        list_needed_get.append(key)
+        list_location_gotten.add(key)
+
+        location_name = find_element_by_xpath_until_found(driver,
+                                                          "//div[@class='section-hero-header-title-description']//h1["
+                                                          "contains(@class, 'section-hero-header-title-title')]",
+                                                          True)
+        try:
+            review_num = driver.find_element_by_xpath(
+                "(//span[@class='section-rating-term'])[1]/span/span/button[@class='widget-pane-link']").text.strip("()")
+        except:
+            print("!!!!---Can not find number review: " + location_name)
+
+        # more exactly use below
+        # addr = driver.find_element_by_xpath("//div[contains(@class, 'section-info-hoverable') and descendant-or-self::span[@aria-label='Địa chỉ']]").text
+        addr = driver.find_element_by_xpath("//div[@class='section-info-line']//span[@class='widget-pane-link']").text
+        try:
+            keyword = driver.find_element_by_xpath(
+                "(//span[@class='section-rating-term'])[2]/span/button[@class='widget-pane-link']").text
+        except:
+            print("!!!!---Can not find key word: " + location_name)
+
+        print("-> Successfull get: " + location_name)
+        store_info(location_name, review_num, keyword, addr, lat, lon)
 
     # back to list search result
     go_back(driver)
     while driver.current_url == current_url:
-        time.sleep(timeMiniDelay)
+        time.sleep(time_mini_delay)
 
 
 def store_info(place_name, review_num, keyword, addr, lat, lon):
@@ -126,10 +169,10 @@ def find_element_by_xpath_until_found(driver, xpath, is_text):
                 return element
         except:
             count += 1
-            print("Can not find element by xpath -> ", xpath, " with count ", count)
+            print("!!!!---Can not find element by xpath -> ", xpath, " with count ", count)
             if count >= max_attempt and is_text:
                 return nullValue
-            time.sleep(timeMiniDelay)
+            time.sleep(time_mini_delay)
             pass
 
 
@@ -138,10 +181,17 @@ def start(driver):
         current_key_word = set_keywords[k]
         init_search(driver, current_key_word)
         while True:
-            time.sleep(timeDelay)
+            time.sleep(time_mini_delay)
             get_result_div(driver)
-            if turn_page(driver) == False:
-                break
+            if not turn_page(driver):
+                if list_needed_get:
+                    lat, lon = list_needed_get.pop().split('_')
+                    target_URL = initial_URL + "/" + start_point.format(lat=lat, lon=lon) + "?hl=vi"
+                    driver.get(target_URL)
+                    driver.implicitly_wait(time_delay)
+                    init_search(driver, current_key_word)
+                else:
+                    break
 
 
 if __name__ == '__main__':
