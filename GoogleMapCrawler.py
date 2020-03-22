@@ -12,7 +12,6 @@ import re
 # chromeOptions.add_experimental_option('prefs', prefs)
 
 start_point = "@{lat},{lon},15z"
-# start_point = "@10.7754483,106.6895788,15z"
 initial_URL = "https://www.google.com/maps"
 target_URL = initial_URL + "/" + start_point.format(lat="10.7754483", lon="106.6895788") + "?hl=vi"
 
@@ -40,6 +39,9 @@ output_file.writerow(["location_name", "review_num", "type", "address", "lat", "
 list_location_gotten = set()
 list_needed_get = list()
 
+count_other_country = 0
+
+
 def append_to_file(content):
     output_file.writerow(content)
 
@@ -48,7 +50,16 @@ def go_back(driver):
     back_button = find_element_by_xpath_until_found(driver,
                                                     "//button[@class='section-back-to-list-button blue-link noprint']",
                                                     False)
-    back_button.click()
+    if back_button is not None:
+        cnt = 0
+        while True:
+            try:
+                back_button.click()
+            except:
+                cnt += 1
+                # print("!!!!---Can not go_back. Maybe can't find the back button ", cnt)
+                if cnt > max_attempt:
+                    break
 
 
 def init_search(driver, keyword):
@@ -62,7 +73,6 @@ def init_search(driver, keyword):
 
 
 def get_result_div(driver):
-
     result_div_list = driver.find_elements_by_class_name("section-result")
     while len(result_div_list) == 0:  # if not found, meaning that is not loaded yet
         result_div_list = driver.find_elements_by_class_name("section-result")
@@ -72,11 +82,16 @@ def get_result_div(driver):
         while len(current_div_list) == 0:
             current_div_list = driver.find_elements_by_class_name("section-result")
 
-        fetch_return(main_driver, current_div_list[count])
+        try:
+            current_result = current_div_list[count]
+            fetch_return(main_driver, current_result)
+        except IndexError:
+            print("!!!!---IndexOutOfRange error")
 
 
 def fetch_return(driver, div):
     cnt = 0
+    global count_other_country
     while True:
         try:
             div.click()
@@ -87,7 +102,8 @@ def fetch_return(driver, div):
             cnt += 1
             if cnt > max_attempt:
                 print("!!!!---Oops! Some error in listing location")
-                exit(0)
+                go_back(driver)
+                return
 
     time.sleep(time_mini_delay + 0.3)
     cnt = 0
@@ -95,8 +111,8 @@ def fetch_return(driver, div):
     while True:
         try:
             current_url = driver.current_url
-            lat = re.search(r"(?<=!3d)[0-9\.]+", driver.current_url).group()
-            lon = re.search(r"(?<=!4d)[0-9\.]+", driver.current_url).group()
+            lat = re.search(r"(?<=!3d)-?[0-9\.]+", driver.current_url).group()
+            lon = re.search(r"(?<=!4d)-?[0-9\.]+", driver.current_url).group()
             key = (lat + "_" + lon)
             break
 
@@ -106,14 +122,13 @@ def fetch_return(driver, div):
             cnt += 1
             if cnt > max_attempt:
                 print("!!!!---Oops! Some error in extract coordinate")
-                exit(0)
+                go_back(driver)
+                return
 
     keyword = current_key_word
     review_num = 0
+    addr = None
     if key not in list_location_gotten:
-        list_needed_get.append(key)
-        list_location_gotten.add(key)
-
         location_name = find_element_by_xpath_until_found(driver,
                                                           "//div[@class='section-hero-header-title-description']//h1["
                                                           "contains(@class, 'section-hero-header-title-title')]",
@@ -124,9 +139,16 @@ def fetch_return(driver, div):
         except:
             print("!!!!---Can not find number review: " + location_name)
 
-        # more exactly use below
-        # addr = driver.find_element_by_xpath("//div[contains(@class, 'section-info-hoverable') and descendant-or-self::span[@aria-label='Địa chỉ']]").text
-        addr = driver.find_element_by_xpath("//div[@class='section-info-line']//span[@class='widget-pane-link']").text
+        try:
+            addr = driver.find_element_by_xpath("//div[contains(@class, 'section-info-hoverable') and descendant-or-self::span[@aria-label='Địa chỉ']]").text
+            # addr = driver.find_element_by_xpath("//div[@class='section-info-line']//span[@class='widget-pane-link']").text
+            if re.search(r"(Việt Nam|Vietnam|VN)", addr) is None:
+                count_other_country += 1
+                go_back(driver)
+                return
+        except:
+            print("!!!!---Can not find address: " + location_name)
+
         try:
             keyword = driver.find_element_by_xpath(
                 "(//span[@class='section-rating-term'])[2]/span/button[@class='widget-pane-link']").text
@@ -135,6 +157,8 @@ def fetch_return(driver, div):
 
         print("-> Successfull get: " + location_name)
         store_info(location_name, review_num, keyword, addr, lat, lon)
+        list_needed_get.append(key)
+        list_location_gotten.add(key)
 
     # back to list search result
     go_back(driver)
@@ -148,10 +172,12 @@ def store_info(place_name, review_num, keyword, addr, lat, lon):
 
 
 def turn_page(driver):
+    if count_other_country >= max_attempt:
+        return False
+
     try:
         next_button = driver.find_element_by_xpath("//button[contains(@id, 'section-pagination-button-next')]")
         next_button.click()
-
     except:
         # can not click, no next page
         return False
@@ -170,8 +196,11 @@ def find_element_by_xpath_until_found(driver, xpath, is_text):
         except:
             count += 1
             print("!!!!---Can not find element by xpath -> ", xpath, " with count ", count)
-            if count >= max_attempt and is_text:
-                return nullValue
+            if count >= max_attempt:
+                if is_text:
+                    return nullValue
+                else:
+                    return None
             time.sleep(time_mini_delay)
             pass
 
@@ -186,6 +215,7 @@ def start(driver):
             if not turn_page(driver):
                 if list_needed_get:
                     lat, lon = list_needed_get.pop().split('_')
+                    print("Change area: ", lat, lon)
                     target_URL = initial_URL + "/" + start_point.format(lat=lat, lon=lon) + "?hl=vi"
                     driver.get(target_URL)
                     driver.implicitly_wait(time_delay)
