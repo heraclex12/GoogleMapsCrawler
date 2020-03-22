@@ -20,10 +20,12 @@ time_mini_delay = 0.2
 nullValue = "None"
 max_attempt = 20  # maxmimum attempt to locate element
 
-set_keywords = ["school", "hospital", "bank", "restaurant", "bar", "coffee", "parking lot", "post office",
-                "supermarket", "park", "garden", "beach", "store", "bus terminal", "sport center", "University",
-                "Theater", "Mall", "FireStation", "Police office", "ATM", "Gas station", "Temple"]
-start_index = 3
+# set_keywords = ["school", "hospital", "bank", "restaurant", "bar", "coffee", "parking lot", "post office",
+#                 "supermarket", "park", "garden", "beach", "store", "bus terminal", "sport center", "University",
+#                 "Theater", "Mall", "FireStation", "Police office", "ATM", "Gas station", "Temple"]
+
+set_keywords = ["school", ]
+start_index = 0
 current_key_word = ""
 
 main_driver = webdriver.Chrome(os.getcwd() + "/chromedriver")
@@ -55,10 +57,11 @@ def go_back(driver):
         while True:
             try:
                 back_button.click()
+                break
             except:
                 cnt += 1
-                # print("!!!!---Can not go_back. Maybe can't find the back button ", cnt)
                 if cnt > max_attempt:
+                    print("!!!!---Can not go_back. Maybe can't find the back button ", cnt)
                     break
 
 
@@ -74,8 +77,13 @@ def init_search(driver, keyword):
 
 def get_result_div(driver):
     result_div_list = driver.find_elements_by_class_name("section-result")
+    cnt = 0
     while len(result_div_list) == 0:  # if not found, meaning that is not loaded yet
         result_div_list = driver.find_elements_by_class_name("section-result")
+        cnt += 1
+        if cnt > max_attempt:
+            print("!!!!--- Can't find location results in search")
+            return
 
     for count in range(0, len(result_div_list)):
         current_div_list = driver.find_elements_by_class_name("section-result")
@@ -162,8 +170,13 @@ def fetch_return(driver, div):
 
     # back to list search result
     go_back(driver)
+    cnt = 0
     while driver.current_url == current_url:
         time.sleep(time_mini_delay)
+        cnt += 1
+        if cnt > max_attempt:
+            print("!!!!---Some issues make current URL dont change, so need to break out of loop")
+            break
 
 
 def store_info(place_name, review_num, keyword, addr, lat, lon):
@@ -226,4 +239,3 @@ def start(driver):
 
 if __name__ == '__main__':
     start(main_driver)
-    output_file.close()
