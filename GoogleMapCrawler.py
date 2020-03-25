@@ -85,10 +85,15 @@ def get_result_div(driver):
             print("!!!!--- Can't find location results in search")
             return
 
+    cnt = 0
     for count in range(0, len(result_div_list)):
         current_div_list = driver.find_elements_by_class_name("section-result")
         while len(current_div_list) == 0:
             current_div_list = driver.find_elements_by_class_name("section-result")
+            cnt += 1
+            if cnt > max_attempt:
+                print("!!!!--- Can't find location results in search")
+                return
 
         try:
             current_result = current_div_list[count]
@@ -222,13 +227,15 @@ def start(driver):
     for k in range(start_index, len(set_keywords)):
         current_key_word = set_keywords[k]
         init_search(driver, current_key_word)
+        list_location_gotten = set()
+        list_needed_get = list()
         while True:
             time.sleep(time_mini_delay)
             get_result_div(driver)
             if not turn_page(driver):
                 if list_needed_get:
                     lat, lon = list_needed_get.pop().split('_')
-                    print("Change area: ", lat, lon)
+                    print("Change scope: ", lat, lon)
                     target_URL = initial_URL + "/" + start_point.format(lat=lat, lon=lon) + "?hl=vi"
                     driver.get(target_URL)
                     driver.implicitly_wait(time_delay)
