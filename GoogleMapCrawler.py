@@ -24,7 +24,7 @@ max_attempt = 20  # maxmimum attempt to locate element
 #                 "supermarket", "park", "garden", "beach", "store", "bus terminal", "sport center", "University",
 #                 "Theater", "Mall", "FireStation", "Police office", "ATM", "Gas station", "Temple"]
 
-set_keywords = ["school", ]
+set_keywords = ["bank", ]
 start_index = 0
 current_key_word = ""
 
@@ -33,10 +33,11 @@ main_driver.get(target_URL)
 main_driver.implicitly_wait(time_delay)
 
 # Write to file
-filename = str(time.ctime()) + ".csv"
-filename = filename.replace(":", "-").replace(' ', '_')
-output_file = csv.writer(open("data/" + filename, "a", encoding='utf-8'))
-output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon"])
+# filename = str(time.ctime()) + ".csv"
+# filename = filename.replace(":", "-").replace(' ', '_')
+# output_file = csv.writer(open("data/" + filename, "a", encoding='utf-8'))
+# output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon"])
+output_file = None
 
 list_location_gotten = set()
 list_needed_get = list()
@@ -66,13 +67,24 @@ def go_back(driver):
 
 
 def init_search(driver, keyword):
-    search_bar_input = find_element_by_xpath_until_found(driver, "//input[@id='searchboxinput']", False)
-    search_bar_input.click()
-    search_bar_input.clear()
-    search_bar_input.send_keys(keyword)
+    try:
+        search_bar_input = find_element_by_xpath_until_found(driver, "//input[@id='searchboxinput']", False)
+        search_bar_input.click()
+        search_bar_input.clear()
+        search_bar_input.send_keys(keyword)
 
-    search_bar_button = find_element_by_xpath_until_found(driver, "//button[@id='searchbox-searchbutton']", False)
-    search_bar_button.click()
+        search_bar_button = find_element_by_xpath_until_found(driver, "//button[@id='searchbox-searchbutton']", False)
+        search_bar_button.click()
+
+    except:
+        driver.delete_all_cookies()
+        driver.quit()
+        time.sleep(time_delay)
+        driver = webdriver.Chrome(os.getcwd() + "/chromedriver")
+        driver.get(target_URL)
+        driver.implicitly_wait(time_delay)
+
+    return driver
 
 
 def get_result_div(driver):
@@ -118,9 +130,8 @@ def fetch_return(driver, div):
                 go_back(driver)
                 return
 
-    time.sleep(time_mini_delay + 0.3)
+    time.sleep(time_mini_delay)
     cnt = 0
-
     while True:
         try:
             current_url = driver.current_url
@@ -224,9 +235,17 @@ def find_element_by_xpath_until_found(driver, xpath, is_text):
 
 
 def start(driver):
+    global target_URL
+    global current_key_word
+    global list_needed_get
+    global list_location_gotten
+    global output_file
+
     for k in range(start_index, len(set_keywords)):
         current_key_word = set_keywords[k]
-        init_search(driver, current_key_word)
+        output_file = csv.writer(open("data/" + current_key_word + ".csv", "a", encoding='utf-8'))
+        output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon"])
+        driver = init_search(driver, current_key_word)
         list_location_gotten = set()
         list_needed_get = list()
         while True:
@@ -238,8 +257,7 @@ def start(driver):
                     print("Change scope: ", lat, lon)
                     target_URL = initial_URL + "/" + start_point.format(lat=lat, lon=lon) + "?hl=vi"
                     driver.get(target_URL)
-                    driver.implicitly_wait(time_delay)
-                    init_search(driver, current_key_word)
+                    driver = init_search(driver, current_key_word)
                 else:
                     break
 
