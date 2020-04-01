@@ -250,12 +250,11 @@ def load_exist_place(key_word):
     try:
         with open("temp/" + key_word + "_list.csv", "r", encoding='utf-8') as csv_file:
             data = csv.reader(csv_file)
-            next(data, None)
-            list_place = list(data)
+            list_place = [r[0] for r in data]
         with open("temp/" + key_word + "_set.csv", "r", encoding='utf-8') as csv_file:
             data = csv.reader(csv_file)
-            next(data, None)
-            set_place = set(data)
+            set_place = {r[0] for r in data}
+
     except:
         pass
 
