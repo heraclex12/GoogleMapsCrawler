@@ -5,6 +5,7 @@ import _thread
 import datetime
 import csv
 import re
+import atexit
 
 # prevent loading image and set up disk cache
 # chromeOptions = webdriver.ChromeOptions()
@@ -24,7 +25,7 @@ max_attempt = 20  # maxmimum attempt to locate element
 #                 "supermarket", "park", "garden", "beach", "store", "bus terminal", "sport center", "University",
 #                 "Theater", "Mall", "FireStation", "Police office", "ATM", "Gas station", "Temple"]
 
-set_keywords = ["bank", ]
+set_keywords = ["mall", ]
 start_index = 0
 current_key_word = ""
 
@@ -38,6 +39,8 @@ main_driver.implicitly_wait(time_delay)
 # output_file = csv.writer(open("data/" + filename, "a", encoding='utf-8'))
 # output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon"])
 output_file = None
+file = None
+
 
 list_location_gotten = set()
 list_needed_get = list()
@@ -47,6 +50,7 @@ count_other_country = 0
 
 def append_to_file(content):
     output_file.writerow(content)
+    file.flush()
 
 
 def go_back(driver):
@@ -151,6 +155,7 @@ def fetch_return(driver, div):
 
     keyword = current_key_word
     review_num = 0
+    img = None
     addr = None
     if key not in list_location_gotten:
         location_name = find_element_by_xpath_until_found(driver,
@@ -174,13 +179,18 @@ def fetch_return(driver, div):
             print("!!!!---Can not find address: " + location_name)
 
         try:
+            img = driver.find_element_by_xpath("//div[@class='section-hero-header-image']//img").get_attribute("src")
+        except:
+            print("!!!!---Can not find thumbnail image: " + location_name)
+
+        try:
             keyword = driver.find_element_by_xpath(
                 "(//span[@class='section-rating-term'])[2]/span/button[@class='widget-pane-link']").text
         except:
             print("!!!!---Can not find key word: " + location_name)
 
         print("-> Successfull get: " + location_name)
-        store_info(location_name, review_num, keyword, addr, lat, lon)
+        store_info(location_name, review_num, keyword, addr, lat, lon, img)
         list_needed_get.append(key)
         list_location_gotten.add(key)
 
@@ -195,8 +205,8 @@ def fetch_return(driver, div):
             break
 
 
-def store_info(place_name, review_num, keyword, addr, lat, lon):
-    info = [place_name, review_num, keyword, addr, lat, lon]
+def store_info(place_name, review_num, keyword, addr, lat, lon, img):
+    info = [place_name, review_num, keyword, addr, lat, lon, img]
     append_to_file(info)
 
 
@@ -234,20 +244,58 @@ def find_element_by_xpath_until_found(driver, xpath, is_text):
             pass
 
 
+def load_exist_place(key_word):
+    list_place = []
+    set_place = set()
+    try:
+        with open("temp/" + key_word + "_list.csv", "r", encoding='utf-8') as csv_file:
+            data = csv.reader(csv_file)
+            next(data, None)
+            list_place = list(data)
+        with open("temp/" + key_word + "_set.csv", "r", encoding='utf-8') as csv_file:
+            data = csv.reader(csv_file)
+            next(data, None)
+            set_place = set(data)
+    except:
+        pass
+
+    return set_place, list_place
+
+
+def backup_list_place():
+    with open("temp/" + current_key_word + "_list.csv", "w", encoding='utf-8') as csv_file:
+        writer = csv.writer(csv_file, delimiter='\n')
+        writer.writerow(list_needed_get)
+        csv_file.flush()
+    with open("temp/" + current_key_word + "_set.csv", "w", encoding='utf-8') as csv_file:
+        writer = csv.writer(csv_file, delimiter='\n')
+        writer.writerow(list_location_gotten)
+        csv_file.flush()
+
+
 def start(driver):
     global target_URL
     global current_key_word
     global list_needed_get
     global list_location_gotten
     global output_file
+    global file
 
     for k in range(start_index, len(set_keywords)):
         current_key_word = set_keywords[k]
-        output_file = csv.writer(open("data/" + current_key_word + ".csv", "a", encoding='utf-8'))
-        output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon"])
+        if os.path.isfile(os.getcwd() + "/data/" + current_key_word + ".csv"):
+            file = open("data/" + current_key_word + ".csv", "a", encoding='utf-8')
+            output_file = csv.writer(file)
+            list_location_gotten, list_needed_get = load_exist_place(current_key_word)
+        else:
+            file = open("data/" + current_key_word + ".csv", "a", encoding='utf-8')
+            output_file = csv.writer(file)
+            output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon", "img"])
+            list_location_gotten = set()
+            list_needed_get = list()
+
         driver = init_search(driver, current_key_word)
-        list_location_gotten = set()
-        list_needed_get = list()
+
         while True:
             time.sleep(time_mini_delay)
             get_result_div(driver)
@@ -263,4 +311,12 @@ def start(driver):
 
 
 if __name__ == '__main__':
-    start(main_driver)
+    try:
+        start(main_driver)
+
+    except:
+        backup_list_place()
+    finally:
+        file.close()
+
+    atexit.register(backup_list_place)
