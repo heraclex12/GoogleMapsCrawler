@@ -6,6 +6,7 @@ import datetime
 import csv
 import re
 import atexit
+from collections import deque
 
 # prevent loading image and set up disk cache
 # chromeOptions = webdriver.ChromeOptions()
@@ -14,7 +15,13 @@ import atexit
 
 start_point = "@{lat},{lon},15z"
 initial_URL = "https://www.google.com/maps"
-target_URL = initial_URL + "/" + start_point.format(lat="10.7754483", lon="106.6895788") + "?hl=vi"
+
+starting_coordinate = [
+    "10.7754483_106.6895788",
+    "12.2428411_109.1819358",
+    "10.9688102_106.8805736",
+    "21.053238_105.8260943"
+]
 
 time_delay = 5
 time_mini_delay = 0.2
@@ -30,7 +37,6 @@ start_index = 0
 current_key_word = ""
 
 main_driver = webdriver.Chrome(os.getcwd() + "/chromedriver")
-main_driver.get(target_URL)
 main_driver.implicitly_wait(time_delay)
 
 # Write to file
@@ -43,7 +49,7 @@ file = None
 
 
 list_location_gotten = set()
-list_needed_get = list()
+list_needed_get = deque()
 
 count_other_country = 0
 
@@ -245,12 +251,12 @@ def find_element_by_xpath_until_found(driver, xpath, is_text):
 
 
 def load_exist_place(key_word):
-    list_place = []
+    list_place = None
     set_place = set()
     try:
         with open("temp/" + key_word + "_list.csv", "r", encoding='utf-8') as csv_file:
             data = csv.reader(csv_file)
-            list_place = [r[0] for r in data]
+            list_place = deque([r[0] for r in data])
         with open("temp/" + key_word + "_set.csv", "r", encoding='utf-8') as csv_file:
             data = csv.reader(csv_file)
             set_place = {r[0] for r in data}
@@ -291,8 +297,12 @@ def start(driver):
             output_file = csv.writer(file)
             output_file.writerow(["location_name", "review_num", "type", "address", "lat", "lon", "img"])
             list_location_gotten = set()
-            list_needed_get = list()
+            list_needed_get = deque(starting_coordinate)
 
+        lat, lon = list_needed_get.popleft().split('_')
+        print("Starting scope: ", lat, lon)
+        target_URL = initial_URL + "/" + start_point.format(lat=lat, lon=lon) + "?hl=vi"
+        driver.get(target_URL)
         driver = init_search(driver, current_key_word)
 
         while True:
@@ -300,7 +310,7 @@ def start(driver):
             get_result_div(driver)
             if not turn_page(driver):
                 if list_needed_get:
-                    lat, lon = list_needed_get.pop().split('_')
+                    lat, lon = list_needed_get.popleft().split('_')
                     print("Change scope: ", lat, lon)
                     target_URL = initial_URL + "/" + start_point.format(lat=lat, lon=lon) + "?hl=vi"
                     driver.get(target_URL)
